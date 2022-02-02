@@ -51,7 +51,6 @@ module drydep
 
   integer(int8), save, public, allocatable :: classnr(:, :)
 
-
   contains
 
 subroutine preprocess_landfraction(values)
@@ -394,7 +393,6 @@ subroutine drydep_nonconstant_vd(tstep, vd, part)
 
   integer :: m, mm, i, j
   real :: dep, deprate_m1
-
 
   m = part%icomp
   if (def_comp(m)%kdrydep == 1 .and. part%z > 0.996) then

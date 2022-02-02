@@ -126,7 +126,7 @@ subroutine fldout_nc(filename, itime,tf1,tf2,tnow, &
       aircraft_doserate_threshold, output_column, &
       output_column, output_vd, output_vd_debug
   USE snapfldML, only: field_hr1, field_hr2, field_hr3, hbl_hr
-  USE snapfldML, only: field1, &
+  USE snapfldML, only: field1, field2, field3, field4, &
       depdry, depwet, &
       avgbq1, avgbq2, garea, pmsl1, pmsl2, hbl1, hbl2, &
       accdry, accwet, avgprec, concen, ps1, ps2, avghbl, &
@@ -630,6 +630,25 @@ subroutine fldout_nc(filename, itime,tf1,tf2,tnow, &
     call check(nf90_put_var(iunit, varid%raero, start=ipos, count=isize, values=raero))
     call check(nf90_put_var(iunit, varid%vs, start=ipos, count=isize, values=vs))
     call check(nf90_put_var(iunit, varid%rs, start=ipos, count=isize, values=rs))
+    end block
+  endif
+
+  if (output_vd_debug) then
+    block
+      use snapfldml, only: t2m, xflux, yflux, z0, hflux, leaf_area_index, &
+        roa, ustar, monin_l, raero, vs, ps2
+    call check(nf90_put_var(iunit, varid%ps_vd, start=ipos, count=isize, values=ps2))
+    call check(nf90_put_var(iunit, varid%t2m, start=ipos, count=isize, values=t2m))
+    call check(nf90_put_var(iunit, varid%xflux, start=ipos, count=isize, values=xflux))
+    call check(nf90_put_var(iunit, varid%yflux, start=ipos, count=isize, values=yflux))
+    call check(nf90_put_var(iunit, varid%z0, start=ipos, count=isize, values=z0))
+    call check(nf90_put_var(iunit, varid%hflux, start=ipos, count=isize, values=hflux))
+    call check(nf90_put_var(iunit, varid%lai, start=ipos, count=isize, values=leaf_area_index))
+    call check(nf90_put_var(iunit, varid%roa, start=ipos, count=isize, values=roa))
+    call check(nf90_put_var(iunit, varid%ustar, start=ipos, count=isize, values=ustar))
+    call check(nf90_put_var(iunit, varid%monin_l, start=ipos, count=isize, values=monin_l))
+    call check(nf90_put_var(iunit, varid%raero, start=ipos, count=isize, values=raero))
+    call check(nf90_put_var(iunit, varid%vs, start=ipos, count=isize, values=vs))
     end block
   endif
 
