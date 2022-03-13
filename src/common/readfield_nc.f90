@@ -24,9 +24,12 @@ module readfield_ncML
   USE snapdebug, only: iulog, idebug
 
   implicit none
-  private
 
-  public readfield_nc, check, nfcheckload, calc_2d_start_length, find_index
+  private
+  public readfield_nc, check, nfcheckload, calc_2d_start_length, find_index, &
+         compute_vertical_coordinates_at_half
+
+  real, parameter, public :: mean_surface_air_pressure = 1013.26
 
   interface nfcheckload
     module procedure nfcheckload1d, nfcheckload2d, nfcheckload3d
@@ -113,7 +116,7 @@ subroutine readfield_nc(istep, backward, itimei, ihr1, ihr2, &
       hbl1, hbl2, hlayer1, hlayer2, garea, dgarea, hlevel1, hlevel2, &
       hlayer1, hlayer2, bl1, bl2, enspos, precip
   USE snapgrdML, only: alevel, blevel, vlevel, ahalf, bhalf, vhalf, &
-      gparam, kadd, klevel, ivlevel, imslp, igtype, ivlayer, ivcoor
+      gparam, kadd, klevel, ivlevel, imslp, igtype, ivlayer
   USE snapmetML, only: met_params
   USE snapdimML, only: nx, ny, nk
   USE datetime, only: datetime_t, duration_t
@@ -140,11 +143,9 @@ subroutine readfield_nc(istep, backward, itimei, ihr1, ihr2, &
 
   integer :: i, k, ilevel, i1, i2
   integer :: nhdiff
-  real :: alev(nk), blev(nk), db, dxgrid, dygrid
+  real :: dxgrid, dygrid
   integer :: kk
-  real :: dred, red, p, px, dp, p1, p2,ptop
-  real :: ptoptmp(1)
-  real, parameter :: mean_surface_air_pressure = 1013.26
+  real :: dred, red, p, px
 
   integer :: timepos, timeposm1
   integer :: start3d(7), start4d(7), count3d(7), count4d(7)
@@ -235,7 +236,6 @@ subroutine readfield_nc(istep, backward, itimei, ihr1, ihr2, &
 
   end if
 
-  ptop = 100.0
   do k=nk-kadd,2,-1
 
   !..input model level no.
@@ -243,7 +243,7 @@ subroutine readfield_nc(istep, backward, itimei, ihr1, ihr2, &
 
     ! dummy-dim only on 2d
     call calc_2d_start_length(start4d, count4d, nx, ny, ilevel, &
-        enspos, timepos, has_2d_dummy_height=.false.) 
+        enspos, timepos, has_2d_dummy_height=.false.)
 
   !..u
   !     Get the varid of the data variable, based on its name.
@@ -258,31 +258,6 @@ subroutine readfield_nc(istep, backward, itimei, ihr1, ihr2, &
 
   !..pot.temp. or abs.temp.
     call nfcheckload(ncid, met_params%pottempv, start4d, count4d, t2(:,:,k))
-
-
-  !   TODO read ptop from file (only needed for sigma), but not in emep data
-    ptop=100.
-  !       if(ivcoor.eq.2) ptop=idata(19)
-  !..p0 for hybrid loaded to ptop, ap is a * p0
-    if (ivcoor /= 2 .AND. .NOT. met_params%ptopv == '') then
-      call nfcheckload(ncid, met_params%ptopv, (/0/), (/1/), ptoptmp)
-      ptop = ptoptmp(1)
-    end if
-  !..alevel (here) only for eta levels
-    if ( .NOT. met_params%apv == '') then
-      call nfcheckload(ncid, met_params%apv, (/ilevel/), (/1/), alev(k:k))
-      call nfcheckload(ncid, met_params%bv, (/ilevel/), (/1/), blev(k:k))
-      if (ivcoor /= 2 .AND. .NOT. met_params%ptopv == '') then
-      !..p0 for hybrid loaded to ptop, ap is a * p0
-        alev(k) = alev(k) * ptop
-      end if
-    ! TODO: check unit (here Pa -> hPa
-      alev(k) = alev(k) / 100
-    end if
-    if ( .NOT. met_params%sigmav == '') then
-    ! reusing blev(k) for sigma(k) later
-      call nfcheckload(ncid, met_params%sigmav, (/ilevel/), (/1/), blev(k:k))
-    end if
 
   !..sigma_dot/eta_dot (0 at surface)
   !..eta: eta_dot (or omega) stored in the same levels as u,v,th.
@@ -353,83 +328,8 @@ subroutine readfield_nc(istep, backward, itimei, ihr1, ihr2, &
   if (first_time_read) then
     first_time_read = .false.
 
-    do k=2,nk-kadd
-      alevel(k)=alev(k)
-      blevel(k)=blev(k)
-    end do
-
-    if(kadd > 0) then
-      if(ivcoor == 2) then
-      !..sigma levels ... blevel=sigma
-        db=blevel(nk-kadd-1)-blevel(nk-kadd)
-        db=max(db,blevel(nk-kadd)/float(kadd))
-        do k=nk-kadd+1,nk
-          blevel(k)=max(blevel(k-1)-db,0.)
-        end do
-      elseif(ivcoor == 10) then
-      !..eta (hybrid) levels
-        p1=alevel(nk-kadd)+blevel(nk-kadd)*1000.
-        p2=alevel(nk-kadd-1)+blevel(nk-kadd-1)*1000.
-        dp=p2-p1
-        if(p1-dp*kadd < 10.) dp=(p1-10.)/kadd
-        db=blevel(nk-kadd-1)-blevel(nk-kadd)
-        db=max(db,blevel(nk-kadd)/float(kadd))
-        do k=nk-kadd+1,nk
-          p1=p1-dp
-          blevel(k)=max(blevel(k-1)-db,0.)
-          alevel(k)=p1-blevel(k)*1000.
-        end do
-      else
-        write(error_unit,*) 'PROGRAM ERROR.  ivcoor= ',ivcoor
-        error stop 255
-      end if
-    end if
-
-    if(ivcoor == 2) then
-    !..sigma levels (norlam)
-      alevel(2:nk) = ptop*(1.0 - blevel(2:nk))
-    end if
-
-  !..surface
-    alevel(1)=0.
-    blevel(1)=1.
-
-    if(ivcoor == 2) then
-    !..sigma levels ... vlevel=sigma
-      vlevel(:) = blevel
-    elseif(ivcoor == 10) then
-    !..eta (hybrid) levels ... vlevel=eta (eta as defined in Hirlam)
-      vlevel(:) = alevel/mean_surface_air_pressure + blevel
-    else
-      write(error_unit,*) 'PROGRAM ERROR.  ivcoor= ',ivcoor
-      error stop 255
-    end if
-
-  !..half levels where height is found,
-  !..alevel and blevel are in the middle of each layer
-    ahalf(1)=alevel(1)
-    bhalf(1)=blevel(1)
-    vhalf(1)=vlevel(1)
-  !..check if subselection of levels
-    do k=2,nk-1
-      if (klevel(k+1) /= klevel(k)-1) then
-        met_params%manual_level_selection = .TRUE.
-      endif
-    end do
-    do k=2,nk-1
-      if ( .NOT. met_params%manual_level_selection) then
-        ahalf(k)=alevel(k)+(alevel(k)-ahalf(k-1))
-        bhalf(k)=blevel(k)+(blevel(k)-bhalf(k-1))
-        vhalf(k)=ahalf(k)/mean_surface_air_pressure+bhalf(k)
-      else
-        ahalf(k)=(alevel(k)+alevel(k+1))*0.5
-        bhalf(k)=(blevel(k)+blevel(k+1))*0.5
-        vhalf(k)=ahalf(k)/mean_surface_air_pressure+bhalf(k)
-      end if
-    end do
-    ahalf(nk)=alevel(nk)
-    bhalf(nk)=blevel(nk)
-    vhalf(nk)=vlevel(nk)
+    call read_vertical_coordinates(ncid, alevel, blevel, vlevel)
+    call compute_vertical_coordinates_at_half(alevel, blevel, vlevel, ahalf, bhalf, vhalf)
 
   !..compute map ratio
     call mapfield(1,0,igtype,gparam,nx,ny,xm,ym,&
@@ -689,6 +589,232 @@ subroutine read_precipitation(ncid, nhdiff, timepos, timeposm1)
   end if
 end subroutine
 
+subroutine parse_formula_terms_hybrid_sigma_pressure(formula, a, is_ap, b, ps, p0)
+  character(len=*), intent(in) :: formula
+
+  character(len=32), intent(out) :: a, b, ps, p0
+  logical, intent(out) :: is_ap
+
+  character(len=32) :: name, var
+
+  integer :: istart, iend
+
+  a = ""
+  is_ap = .false.
+  b = ""
+  ps = ""
+  p0 = ""
+
+  ! Split after <SPACE><NAME>: <VAR>
+
+  istart = 1
+  do while (istart < len(formula))
+    do iend=istart,len(formula)
+      select case (formula(iend:iend))
+        case (" ")
+          istart = istart + 1
+          cycle
+        case (":")
+          exit
+      end select
+    end do
+    name = formula(istart:iend-1)
+    istart = iend+1
+
+    do iend=istart,len(formula)
+      if (formula(iend:iend) /= " ") exit
+      istart = istart + 1
+    enddo
+
+    do iend=istart,len(formula)
+      if (formula(iend:iend) == " ") then
+        exit
+      endif
+    enddo
+    var = formula(istart:iend)
+    istart = iend+1
+
+    select case (name)
+      case("a")
+        a = var
+      case("ap")
+        a = var
+        is_ap = .true.
+      case("b")
+        b = var
+      case("ps")
+        ps = var
+      case("p0")
+        p0 = var
+      case default
+        error stop "Unknown coordinate name"
+    end select
+  enddo
+end subroutine
+
+!> Read vertical coordinates for transformation from k-level
+!> to pressure
+!>
+!> Pressure can be computed with p = a + b*ps, where [p] = hPa, [ps] = hPa
+subroutine read_vertical_coordinates(iunit, alevel, blevel, vlevel)
+  USE iso_fortran_env, only: error_unit
+  USE snapmetML, only: met_params
+  USE snapdimML, only: nk
+  USE snapgrdML, only: klevel, kadd
+  USE netcdf
+
+  integer, intent(in) :: iunit
+  real, intent(out) :: alevel(:)
+  real, intent(out) :: blevel(:)
+  real, intent(out) :: vlevel(:)
+
+  integer :: varid_lev
+  integer :: nf_str_len
+  character(len=:), allocatable :: standard_name
+  character(len=:), allocatable :: formula_terms
+
+  integer :: k, stat
+
+  stat = nf90_inq_varid(iunit, "lev", varid_lev)
+  if (stat /= NF90_NOERR) then
+    call check(nf90_inq_varid(iunit, "hybrid", varid_lev), "lev")
+  endif
+
+  call check(nf90_inquire_attribute(iunit, varid_lev, "standard_name", len=nf_str_len), &
+    "standard_name")
+  allocate(character(len=nf_str_len) :: standard_name)
+  call check(nf90_get_att(iunit, varid_lev, "standard_name", standard_name), "standard_name")
+
+  select case(standard_name)
+    case("atmosphere_hybrid_sigma_pressure_coordinate")
+      block
+      character(len=32) :: name_a, name_b, name_ps, name_p0
+      integer :: varid_p0
+      logical :: a_is_ap
+      real scaling_factor_pressure
+
+      call check(nf90_inquire_attribute(iunit, varid_lev, &
+        "formula_terms", len=nf_str_len), &
+        "formula_terms")
+      allocate(character(len=nf_str_len) :: formula_terms)
+      call check(nf90_get_att(iunit, varid_lev, "formula_terms", formula_terms), "formula_terms")
+      call parse_formula_terms_hybrid_sigma_pressure(formula_terms, name_a, a_is_ap, name_b, name_ps, name_p0)
+
+      if (name_ps /= met_params%psv) then
+        error stop "Mismatch between surface pressure names"
+      endif
+
+      do k=nk-kadd,2,-1
+        call nfcheckload(iunit, name_a, klevel(k:k), [1], alevel(k:k))
+        call nfcheckload(iunit, name_b, klevel(k:k), [1], blevel(k:k))
+      enddo
+
+      !..surface
+      alevel(1)=0.
+      blevel(1)=1.
+
+      ! Normalize alevel by surface pressure
+      if (.not. a_is_ap) then
+        block
+        real :: p0array(1)
+        character(len=:), allocatable :: p0_units
+        call check(nf90_inq_varid(iunit, name_p0, varid_p0), "Retrieve p0")
+        call check(nf90_inquire_attribute(iunit, varid_p0, "units", len=nf_str_len), "get units of p0")
+        allocate(character(len=nf_str_len) :: p0_units)
+        call check(nf90_get_att(iunit, varid_p0, "units", p0_units), "get units of p0")
+        call nfcheckload(iunit, name_p0, [1], [1], p0array)
+
+        scaling_factor_pressure = 1.0
+        select case(p0_units)
+          case ("Pa")
+            scaling_factor_pressure = 1.0/100.0
+          case ("hPa")
+            scaling_factor_pressure = 1.0
+          case default
+            error stop "Unknown pressure unit"
+        end select
+
+        alevel(:) = alevel(:) * p0array(1) * scaling_factor_pressure
+        blevel(:) = blevel(:)
+
+        vlevel(:) = alevel/mean_surface_air_pressure + blevel
+        end block
+      else
+        if (len_trim(name_p0) == 0) then
+          error stop "Formula terms contains ap, but no p0 specified"
+        endif
+        block
+        character(len=:), allocatable :: ap_units
+        integer :: varid_ap
+        call check(nf90_inq_varid(iunit, name_a, varid_ap), "Retrieve ap")
+        call check(nf90_inquire_attribute(iunit, varid_ap, "units", len=nf_str_len), "get units of p0")
+        allocate(character(len=nf_str_len) :: ap_units)
+        call check(nf90_get_att(iunit, varid_ap, "units", ap_units), "get units of p0")
+        scaling_factor_pressure = 1.0
+        select case(ap_units)
+          case ("Pa")
+            scaling_factor_pressure = 1.0/100.0
+          case ("hPa")
+            scaling_factor_pressure = 1.0
+          case default
+            error stop "Unknown pressure unit"
+        end select
+
+        alevel(:) = alevel(:) * scaling_factor_pressure
+        blevel(:) = blevel(:)
+
+        vlevel(:) = alevel/mean_surface_air_pressure + blevel
+        end block
+      endif
+      end block
+    case("atmosphere_ln_pressure_coordinate","atmosphere_sigma_coordinate")
+      error stop "Parametric vertical coordinate not yet supported"
+    case default
+      write(error_unit, *) "Parametric vertical coordinate: ", standard_name
+      error stop "Unknown parametric vertical coordinate"
+  end select
+end subroutine
+
+subroutine compute_vertical_coordinates_at_half(alevel, blevel, vlevel, ahalf, bhalf, vhalf)
+  USE snapmetML, only: met_params
+  USE snapdimML, only: nk
+  USE snapgrdML, only: klevel
+  real, intent(in) :: alevel(:)
+  real, intent(in) :: blevel(:)
+  real, intent(in) :: vlevel(:)
+
+  real, intent(out) :: ahalf(:)
+  real, intent(out) :: bhalf(:)
+  real, intent(out) :: vhalf(:)
+
+  integer :: k
+
+  !..half levels where height is found,
+  !..alevel and blevel are in the middle of each layer
+    ahalf(1)=alevel(1)
+    bhalf(1)=blevel(1)
+    vhalf(1)=vlevel(1)
+  !..check if subselection of levels
+    do k=2,nk-1
+      if (klevel(k+1) /= klevel(k)-1) then
+        met_params%manual_level_selection = .TRUE.
+      endif
+    end do
+    do k=2,nk-1
+      if ( .NOT. met_params%manual_level_selection) then
+        ahalf(k)=alevel(k)+(alevel(k)-ahalf(k-1))
+        bhalf(k)=blevel(k)+(blevel(k)-bhalf(k-1))
+        vhalf(k)=ahalf(k)/mean_surface_air_pressure+bhalf(k)
+      else
+        ahalf(k)=(alevel(k)+alevel(k+1))*0.5
+        bhalf(k)=(blevel(k)+blevel(k+1))*0.5
+        vhalf(k)=ahalf(k)/mean_surface_air_pressure+bhalf(k)
+      end if
+    end do
+    ahalf(nk)=alevel(nk)
+    bhalf(nk)=blevel(nk)
+    vhalf(nk)=vlevel(nk)
+end subroutine
 
 !> calculate the start and length paramters for slicing
 !> a 2d field from a 3-5d dataset

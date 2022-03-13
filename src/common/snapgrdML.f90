@@ -110,10 +110,6 @@ module snapgrdML
 !> * 2=geographic
 !> * 3=spherical (rotated)
     integer, save, public :: igtype
-! vertical coordinate
-!> * 2=sigma (Norlam)
-!> * 10=eta   (Hirlam,...))
-    integer, save, public :: ivcoor = 0
 !> levels added at the top (when missing upper model levels)
 !>
 !> (u,v copied up, w reduced, pot.temp. const.)

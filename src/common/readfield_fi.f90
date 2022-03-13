@@ -71,12 +71,13 @@ contains
       hbl1, hbl2, hlayer1, hlayer2, garea, dgarea, hlevel1, hlevel2, &
       hlayer1, hlayer2, bl1, bl2, enspos, precip
     USE snapgrdML, only: alevel, blevel, vlevel, ahalf, bhalf, vhalf, &
-                         gparam, kadd, klevel, ivlevel, imslp, igtype, ivlayer, ivcoor
+                         gparam, kadd, klevel, ivlevel, imslp, igtype, ivlayer
     USE snapmetML, only: met_params, xy_wind_units, pressure_units, omega_units, &
                          sigmadot_units, temp_units
     USE snapdimML, only: nx, ny, nk
     USE datetime, only: datetime_t, duration_t
-    USE readfield_ncML, only: find_index
+    USE readfield_ncML, only: find_index, compute_vertical_coordinates_at_half, &
+                              mean_surface_air_pressure
 !> current timestep (always positive), negative istep means reset
     integer, intent(in) :: istep
 !> whether meteorology should be read backwards
@@ -96,16 +97,13 @@ contains
     TYPE(FimexIO) :: fio
     integer, save :: ntav1, ntav2 = 0
     character(len=1024), save :: file_name = ""
-    character(len=1024), save :: ap_units = pressure_units
     logical, save :: first_time_read = .true.
 
     integer :: i, k, ilevel, i1, i2
     integer :: nhdiff
-    real :: alev(nk), blev(nk), db, dxgrid, dygrid
+    real :: dxgrid, dygrid
     integer :: kk, ifb, kfb
-    real :: dred, red, p, px, dp, p1, p2, ptop
-    real :: ptoptmp(1)
-    real, parameter :: mean_surface_air_pressure = 1013.26
+    real :: dred, red, p, px
 
     integer :: timepos, timeposm1, nr
 
@@ -191,7 +189,6 @@ contains
 
     end if
 
-    ptop = 100.0
     do k = nk - kadd, 2, -1
 
       !..input model level no.
@@ -211,28 +208,25 @@ contains
       !..pot.temp. or abs.temp.
       call fi_checkload(fio, met_params%pottempv, temp_units, t2(:, :, k), nt=timepos, nz=ilevel, nr=nr)
 
-      !   TODO read ptop from file (only needed for sigma), but not in emep data
-      ptop = 100. ! hPa
-      !       if(ivcoor.eq.2) ptop=idata(19)
-      !..p0 for hybrid loaded to ptop, ap is a * p0
-      if (ivcoor /= 2 .AND. .NOT. met_params%ptopv == '') then
-        call fi_checkload(fio, met_params%ptopv, pressure_units, ptoptmp)
-        ptop = ptoptmp(1)
-        ap_units = ""
-      end if
-      !..alevel (here) only for eta levels
-      if (.NOT. met_params%apv == '') then
-        call fi_checkload(fio, met_params%apv, ap_units, alev(k:k), nz=ilevel)
-        call fi_checkload(fio, met_params%bv, "", blev(k:k), nz=ilevel)
-        if (ivcoor /= 2 .AND. .NOT. met_params%ptopv == '') then
-          !..p0 for hybrid loaded to ptop, ap is a * p0
-          alev(k) = alev(k)*ptop
-        end if
-      end if
-      if (.NOT. met_params%sigmav == '') then
-        ! reusing blev(k) for sigma(k) later
-        call fi_checkload(fio, met_params%sigmav, "", blev(k:k), nz=ilevel)
-      end if
+      block
+      integer :: fi_stat
+      real :: p0(1)
+      if (.not.(len_trim(met_params%apv)>0.and.len_trim(met_params%bv)>0)) then
+        error stop "Both a, b must be specified to read with fimex"
+      endif
+
+      ! Read as if a is pressure coordinate
+      call fi_checkload(fio, met_params%apv, pressure_units, alevel(k:k), nz=ilevel, ierror=fi_stat)
+      if (fi_stat /= 0) then
+        if (len_trim(met_params%ptopv)==0) then
+          error stop "Can not read a as a pressure unit, but there is no p0 defined"
+        endif
+        call fi_checkload(fio, met_params%apv, "1", alevel(k:k), nz=ilevel)
+        call fi_checkload(fio, met_params%ptopv, pressure_units, p0)
+        alevel(k:k) = alevel(k:k) * p0
+      endif
+      call fi_checkload(fio, met_params%bv, "", blevel(k:k), nz=ilevel)
+      end block
 
       !..sigma_dot/eta_dot (0 at surface)
       !..eta: eta_dot (or omega) stored in the same levels as u,v,th.
@@ -247,6 +241,11 @@ contains
       end if
 
     end do ! k=nk-kadd,2,-1
+
+    alevel(1) = 0.0
+    blevel(1) = 1.0
+    vlevel(:) = alevel/mean_surface_air_pressure + blevel
+    call compute_vertical_coordinates_at_half(alevel, blevel, vlevel, ahalf, bhalf, vhalf)
 
 !..surface pressure, 10m wind and possibly mean sea level pressure,
 !..precipitation
@@ -286,86 +285,6 @@ contains
 ! first time initialized data
     if (first_time_read) then
       first_time_read = .false.
-
-      do k = 2, nk - kadd
-        alevel(k) = alev(k)
-        blevel(k) = blev(k)
-      end do
-
-      if (kadd > 0) then
-        if (ivcoor == 2) then
-          !..sigma levels ... blevel=sigma
-          db = blevel(nk - kadd - 1) - blevel(nk - kadd)
-          db = max(db, blevel(nk - kadd)/float(kadd))
-          do k = nk - kadd + 1, nk
-            blevel(k) = max(blevel(k - 1) - db, 0.)
-          end do
-        elseif (ivcoor == 10) then
-          !..eta (hybrid) levels
-          p1 = alevel(nk - kadd) + blevel(nk - kadd)*1000.
-          p2 = alevel(nk - kadd - 1) + blevel(nk - kadd - 1)*1000.
-          dp = p2 - p1
-          if (p1 - dp*kadd < 10.) dp = (p1 - 10.)/kadd
-          db = blevel(nk - kadd - 1) - blevel(nk - kadd)
-          db = max(db, blevel(nk - kadd)/float(kadd))
-          do k = nk - kadd + 1, nk
-            p1 = p1 - dp
-            blevel(k) = max(blevel(k - 1) - db, 0.)
-            alevel(k) = p1 - blevel(k)*1000.
-          end do
-        else
-          write (error_unit, *) 'PROGRAM ERROR.  ivcoor= ', ivcoor
-          error stop 255
-        end if
-      end if
-
-      if (ivcoor == 2) then
-        !..sigma levels (norlam)
-        do k = 2, nk
-          alevel(k) = ptop*(1.-blevel(k))
-        end do
-      end if
-
-      !..surface
-      alevel(1) = 0.
-      blevel(1) = 1.
-
-      if (ivcoor == 2) then
-        !..sigma levels ... vlevel=sigma
-        vlevel(:) = blevel
-      elseif (ivcoor == 10) then
-        !..eta (hybrid) levels ... vlevel=eta (eta as defined in Hirlam)
-        vlevel(:) = alevel/mean_surface_air_pressure + blevel
-      else
-        write (error_unit, *) 'PROGRAM ERROR.  ivcoor= ', ivcoor
-        error stop 255
-      end if
-
-      !..half levels where height is found,
-      !..alevel and blevel are in the middle of each layer
-      ahalf(1) = alevel(1)
-      bhalf(1) = blevel(1)
-      vhalf(1) = vlevel(1)
-      !..check if subselection of levels
-      do k = 2, nk - 1
-        if (klevel(k + 1) /= klevel(k) - 1) then
-          met_params%manual_level_selection = .TRUE.
-        endif
-      end do
-      do k = 2, nk - 1
-        if (.NOT. met_params%manual_level_selection) then
-          ahalf(k) = alevel(k) + (alevel(k) - ahalf(k - 1))
-          bhalf(k) = blevel(k) + (blevel(k) - bhalf(k - 1))
-          vhalf(k) = ahalf(k)/mean_surface_air_pressure + bhalf(k)
-        else
-          ahalf(k) = (alevel(k) + alevel(k + 1))*0.5
-          bhalf(k) = (blevel(k) + blevel(k + 1))*0.5
-          vhalf(k) = ahalf(k)/mean_surface_air_pressure + bhalf(k)
-        end if
-      end do
-      ahalf(nk) = alevel(nk)
-      bhalf(nk) = blevel(nk)
-      vhalf(nk) = vlevel(nk)
 
       !..compute map ratio
       call mapfield(1, 0, igtype, gparam, nx, ny, xm, ym, &
@@ -624,7 +543,7 @@ contains
 
     real(kind=real64), dimension(:), allocatable, target :: zfield
 
-    call fi_checkload_intern(fio, varname, units, zfield, nt, nz, nr)
+    call fi_checkload_intern(fio, varname, units, zfield, nt, nz, nr, ierror)
 
     field(:) = REAL(reshape(zfield, shape(field)), KIND=real32)
     deallocate(zfield)

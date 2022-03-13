@@ -154,7 +154,7 @@ PROGRAM bsnap
                        ncomp, def_comp, nparnum, &
                        time_profile, TIME_PROFILE_BOMB
   USE snapposML, only: irelpos, nrelpos, release_positions
-  USE snapgrdML, only: modleveldump, ivcoor, ixbase, iybase, ixystp, kadd, &
+  USE snapgrdML, only: modleveldump, ixbase, iybase, ixystp, kadd, &
                        klevel, imslp, iprod, iprodr, itotcomp, gparam, igrid, igridr, &
                        igtype, imodlevel, precipitation_in_output
   USE snaptabML, only: tabcon
@@ -1711,10 +1711,12 @@ contains
         read (cinput(pname_start:pname_end), *, err=12) enspos
       case ('data.sigma.levels')
         !..data.sigma.levels
-        ivcoor = 2
+        write(error_unit,*) "data.sigma.levels is no longer used"
+        warning = .true.
       case ('data.eta.levels')
         !..data.eta.levels
-        ivcoor = 10
+        write(error_unit,*) "data.eta.levels is no longer used"
+        warning = .true.
       case ('levels.input')
         !..levels.input=<num_levels, 0,kk,k,k,k,....,1>
         !..levels.input=<num_levels, 0,kk,k,k,k,....,18,0,0,...>
@@ -2016,10 +2018,6 @@ contains
       ierror = 1
     end if
 
-    if (ivcoor == 0) then
-      write (error_unit, *) 'Input model level type (sigma,eta) not specified'
-      ierror = 1
-    end if
     if (nlevel == 0) then
       write (error_unit, *) 'Input model levels not specified'
       ierror = 1
