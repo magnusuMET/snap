@@ -1440,14 +1440,14 @@ subroutine accumulate_fields(tf1, tf2, tnow, tstep, nsteph)
       k = ivlayer(ivlvl)
       m = def_comp(part%icomp)%to_running
     !..in each sigma/eta (input model) layer
-      max_aircraft_doserate_scratch(i,j,k,m) = max_aircraft_doserate_scratch(i,j,k,m) + part%rad
+      max_aircraft_doserate_scratch(i,j,k,1) = max_aircraft_doserate_scratch(i,j,k,1) + part%rad*def_comp(part%icomp)%DPUI
     enddo
 
     ! Normalise by volume to obtain concentration
     do n=1,ncomp
       do k=2,nk-1
         associate(dh => rt1*hlayer1(:,:,k) + rt2*hlayer2(:,:,k))
-          max_aircraft_doserate_scratch(:,:,k,n) = max_aircraft_doserate_scratch(:,:,k,n)/(dh*garea)
+          max_aircraft_doserate_scratch(:,:,k,1) = max_aircraft_doserate_scratch(:,:,k,1)/(dh*garea)
         end associate
       enddo
     enddo
@@ -1459,23 +1459,23 @@ subroutine accumulate_fields(tf1, tf2, tnow, tstep, nsteph)
       inside_pressure(:,:) = max(outside_pressure, regulatory_minimum_pressure)
 
       do n=1,ncomp
-        max_aircraft_doserate_scratch(:,:,k,n) = max_aircraft_doserate_scratch(:,:,k,n) * &
+        max_aircraft_doserate_scratch(:,:,k,1) = max_aircraft_doserate_scratch(:,:,k,1) * &
           inside_pressure / outside_pressure * &
           outside_temperature / inside_temperature
       enddo
     enddo
 
     ! Weight the dose contributions from each isotope
-    do n=1,ncomp
-      if (run_comp(n)%defined%DPUI <= 0) cycle
-      max_aircraft_doserate_scratch(:,:,:,n) = max_aircraft_doserate_scratch(:,:,:,n) * run_comp(n)%defined%DPUI
-      ! Sum dose contributions
-      max_aircraft_doserate_scratch(:,:,:,ncomp+1) = max_aircraft_doserate_scratch(:,:,:,ncomp+1) + &
-        max_aircraft_doserate_scratch(:,:,:,n)
-    enddo
+    ! do n=1,ncomp
+    !   if (run_comp(n)%defined%DPUI <= 0) cycle
+    !   max_aircraft_doserate_scratch(:,:,:,n) = max_aircraft_doserate_scratch(:,:,:,n) * run_comp(n)%defined%DPUI
+    !   ! Sum dose contributions
+    !   max_aircraft_doserate_scratch(:,:,:,ncomp+1) = max_aircraft_doserate_scratch(:,:,:,ncomp+1) + &
+    !     max_aircraft_doserate_scratch(:,:,:,n)
+    ! enddo
 
     if (aircraft_doserate_threshold > 0.0) then
-      associate(doserate => max_aircraft_doserate_scratch(:,:,:,ncomp+1), thresh => aircraft_doserate_threshold, &
+      associate(doserate => max_aircraft_doserate_scratch(:,:,:,1), thresh => aircraft_doserate_threshold, &
         pressure => outside_pressure, pressure_altitude => inside_pressure)
       do k=2,nk-1
         ! NOAA conversion formula www.weather.gov/media/epz/wxcalc/pressureConversion.pdf
@@ -1489,10 +1489,10 @@ subroutine accumulate_fields(tf1, tf2, tnow, tstep, nsteph)
     endif
 
     ! Take max over column, skip k=1 since this we do not have temp here
-    max_aircraft_doserate_scratch(:,:,1,ncomp+1) = maxval(max_aircraft_doserate_scratch(:,:,2:,ncomp+1), dim=3)
+    max_aircraft_doserate_scratch(:,:,1,1) = maxval(max_aircraft_doserate_scratch(:,:,2:,1), dim=3)
 
     max_aircraft_doserate(:,:) = max(max_aircraft_doserate, &
-      max_aircraft_doserate_scratch(:,:,1,ncomp+1))
+      max_aircraft_doserate_scratch(:,:,1,1))
     end block
   endif
 end subroutine
