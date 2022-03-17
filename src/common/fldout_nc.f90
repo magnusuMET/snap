@@ -1426,9 +1426,11 @@ subroutine accumulate_fields(tf1, tf2, tnow, tstep, nsteph)
     use snapdimml, only: nx, ny
     real, parameter :: regulatory_minimum_pressure = 750 ! hPa
     real, parameter :: inside_temperature = 20 + 275.15
-    real, allocatable :: outside_pressure(:,:), inside_pressure(:,:), outside_temperature(:,:)
+    real, allocatable, save :: outside_pressure(:,:), inside_pressure(:,:), outside_temperature(:,:)
 
-    allocate(outside_pressure(nx,ny),inside_pressure(nx,ny),outside_temperature(nx,ny))
+    if (.not.allocated(outside_pressure)) then
+      allocate(outside_pressure(nx,ny),inside_pressure(nx,ny),outside_temperature(nx,ny))
+    endif
 
     max_aircraft_doserate_scratch = 0.0
     ! Flatten particles to grid
