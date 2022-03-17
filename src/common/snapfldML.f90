@@ -135,8 +135,10 @@ module snapfldML
 !> only used if compute_column_max_conc
   real, allocatable, save, public :: max_column_concentration(:,:)
 
-!> Scratch space for dose calculation
-  real, allocatable, public :: max_aircraft_doserate_scratch(:,:,:,:)
+!> Scratch space for doserate calculation
+  real, allocatable, public :: max_aircraft_doserate_scratch(:,:,:)
+!> Scratch spaces for doserate calculation
+  real, allocatable, public :: max_aircraft_scratch(:,:,:)
 !> Doserate
   real, allocatable, public :: max_aircraft_doserate(:,:)
   !> Height of doserates exceeding the given threshold
