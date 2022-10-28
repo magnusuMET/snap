@@ -69,6 +69,15 @@ class SnapJobEC:
         if os.path.exists(os.path.join(self.task.rundir, requestfile)):
             argosrequest = "--argosrequest " + requestfile
 
+        if self.task.queue == "atom.q":
+            mem_options = "h_rss=8G,mem_free=8G,s_rss=7.9G"
+            queue = "atom.q"
+            module_loading = "module use /modules/MET/rhel8/user-modules/fou-modules && module load conda/atom-fimex-2022-10-21-read-only"
+        else:
+            mem_options = "h_vmem=8G"
+            queue = "operational-bionic.q"
+            module_loading = "module load SnapPy/2.1.7"
+
         # Create qsub script
         script = """#!/bin/bash
 #$ -N dsa_bsnap
@@ -77,12 +86,12 @@ class SnapJobEC:
 #$ -j n
 #$ -r y
 #$ -l h_rt=2:00:00
-#$ -l h_vmem=8G
+#$ -l {mem_options}
 #$ -M beredskap-fou-kl@met.no
 #$ -m a
 #$ -P dsa
 #$ -pe shmem-1 1
-#$ -q operational-bionic.q
+#$ -q {queue}
 #$ -sync no
 #$ -o {rundir}/$JOB_NAME.$JOB_ID.logout
 #$ -e {rundir}/$JOB_NAME.$JOB_ID.logerr
@@ -104,9 +113,7 @@ function send_msg()
 }}
 
 
-module load SnapPy/2.1.7
-# requires fimex version 1.8.1 for bitmapCompression
-# module load fimex/1.8.1
+{module_loading}
 
 ulimit -c 0
 export OMP_NUM_THREADS=1
@@ -149,6 +156,9 @@ exit 0;
             statusfile=self.task.status_filename(),
             scpoptions=self.task.scpoptions,
             scpdestination=self.task.scpdestination,
+            queue=queue,
+            module_loading=module_loading,
+            mem_options=mem_options,
         )
 
         return script
