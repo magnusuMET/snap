@@ -24,6 +24,7 @@ module allocateFieldsML
       depdry, depwet, accprec, avgprec, avghbl, precip, &
       pmsl1, pmsl2, field1, field2, field3, field4, xm, ym, &
       garea, dgarea, &
+      bq_removed_ood, &
       max_column_scratch, max_column_concentration, &
       aircraft_doserate, aircraft_doserate_scratch, t1_abs, t2_abs, &
       aircraft_doserate_threshold_height
@@ -199,6 +200,10 @@ subroutine allocateFields
     endif
   endif
 
+  allocate(bq_removed_ood(ncomp), STAT=AllocateStatus)
+  if (AllocateStatus /= 0) ERROR STOP errmsg
+  bq_removed_ood(:) = 0.0
+
 end subroutine allocateFields
 
 
@@ -280,6 +285,8 @@ subroutine deAllocateFields
   if (allocated(t1_abs)) then
     deallocate(t1_abs, t2_abs)
   endif
+
+  deallocate(bq_removed_ood)
 
   DEALLOCATE ( pdata )
   DEALLOCATE ( iparnum )

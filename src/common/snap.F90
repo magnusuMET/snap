@@ -155,7 +155,7 @@ PROGRAM bsnap
   USE snapdimML, only: nx, ny, nk, ldata, maxsiz, mcomp
   USE snapfilML, only: filef, itimer, ncsummary, nctitle, nhfmax, nhfmin, &
                        nctype, nfilef, simulation_start, spinup_steps
-  USE snapfldML, only: nhfout, enspos
+  USE snapfldML, only: nhfout, enspos, depwet, bq_removed_ood
   USE snapmetML, only: init_meteo_params, met_params
   USE snapparML, only: component, run_comp, &
                        ncomp, def_comp, nparnum, &
@@ -173,7 +173,6 @@ PROGRAM bsnap
   USE checkdomainML, only: checkdomain
   USE rwalkML, only: rwalk, rwalk_init
   USE milibML, only: xyconvert
-  use snapfldML, only: depwet
   USE forwrdML, only: forwrd, forwrd_init
   USE wetdep, only: wetdep2, wetdep2_init
   USE drydep, only: drydep1, drydep2
@@ -725,7 +724,7 @@ PROGRAM bsnap
       call particleloop_timer%stop_and_log()
 
       !..remove inactive particles or without any mass left
-      call rmpart(rmlimit)
+      call rmpart(rmlimit, bq_removed_ood)
 
       !..split particles after some time of transport
       if (split_particle_after_step > 0) then
@@ -826,6 +825,11 @@ PROGRAM bsnap
   call output_timer%print_accumulated()
   call input_timer%print_accumulated()
   call particleloop_timer%print_accumulated()
+
+  write(iulog, *) 'Bq out of the domain'
+  do i=1,ncomp
+    write(iulog, '(a, ": ", e10.4)') trim(run_comp(i)%defined%compnamemc), bq_removed_ood(i)
+  enddo
   ! b_end
   write (iulog, *) ' SNAP run finished'
   write (error_unit, *) ' SNAP run finished'

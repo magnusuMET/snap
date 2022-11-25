@@ -126,6 +126,9 @@ module snapfldML
 !> only used if imodlevel
   real(kind=real64), allocatable, save, public :: avgbq(:,:,:,:)
 
+!> particle load removed out of the domain
+  real(kind=real64), allocatable, save, public :: bq_removed_ood(:)
+
 !> Scratch space for finding max column concentration
 !>
 !> only used if compute_column_max_conc
