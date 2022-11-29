@@ -122,7 +122,9 @@ subroutine rmpart(rmlimit, removed_out_of_domain)
           pdata(n) = pdata(i)
           iparnum(n)=iparnum(i)
         end if
-      end if
+      else
+        removed_out_of_domain(pdata(i)%icomp) = removed_out_of_domain(pdata(i)%icomp) + pdata(i)%rad
+      endif
     end do
 
   ! updating plume-particle relation, or making plume empty
@@ -141,7 +143,6 @@ subroutine rmpart(rmlimit, removed_out_of_domain)
 !..note: if pmlost>0 we lost mass inside the grid area
 !..      (no later plumes to take the mass).
 
-  removed_out_of_domain(:) = removed_out_of_domain(:) + pbqlost(:)
 
 end subroutine rmpart
 end module rmpartML
