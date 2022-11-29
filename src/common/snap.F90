@@ -170,7 +170,7 @@ PROGRAM bsnap
   USE fldout_ncML, only: fldout_nc, initialize_output, accumulate_fields
   USE rmpartML, only: rmpart
   USE split_particlesML, only: split_particles
-  USE checkdomainML, only: checkdomain
+  USE checkdomainML, only: constrain_to_domain
   USE rwalkML, only: rwalk, rwalk_init
   USE milibML, only: xyconvert
   USE forwrdML, only: forwrd, forwrd_init
@@ -237,6 +237,7 @@ PROGRAM bsnap
   real ::    rscale
   integer :: ntprof
   type(duration_t) :: dur
+  logical :: outside_domain
 ! ipcount(mdefcomp, nk)
 ! integer, dimension(:,:), allocatable:: ipcount
 ! npcount(nk)
@@ -693,7 +694,7 @@ PROGRAM bsnap
 
       call particleloop_timer%start()
       ! particle loop
-      !$OMP PARALLEL DO PRIVATE(pextra) SCHEDULE(guided) !np is private by default
+      !$OMP PARALLEL DO PRIVATE(np,pextra,outside_domain) SCHEDULE(guided) REDUCTION(+:bq_removed_ood)
       part_do: do np = 1, npart
         if (.not. pdata(np)%active) cycle part_do
 
@@ -717,14 +718,18 @@ PROGRAM bsnap
         !..apply the random walk method (diffusion)
         if (use_random_walk) call rwalk(blfullmix, pdata(np), pextra)
 
-        !.. check domain (%active) after moving particle
-        call checkDomain(pdata(np))
+        !.. check domain after moving particle
+        call constrain_to_domain(pdata(np), outside_domain)
+        if (outside_domain) then
+          pdata(np)%active = .false.
+          bq_removed_ood(pdata(np)%icomp) = bq_removed_ood(pdata(np)%icomp) + pdata(np)%rad
+        endif
       end do part_do
       !$OMP END PARALLEL DO
       call particleloop_timer%stop_and_log()
 
       !..remove inactive particles or without any mass left
-      call rmpart(rmlimit, bq_removed_ood)
+      call rmpart(rmlimit)
 
       !..split particles after some time of transport
       if (split_particle_after_step > 0) then

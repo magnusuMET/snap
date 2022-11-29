@@ -27,7 +27,7 @@ module rmpartML
 !> or have lost (almost) all mass, in the last case the
 !> remaining mass is transferred to to the other particles
 !> in the same plume (or to the next plume if none left).
-subroutine rmpart(rmlimit, removed_out_of_domain)
+subroutine rmpart(rmlimit)
   USE ISO_FORTRAN_ENV, only: real64
   USE particleML, only: pdata, numeric_limit_rad
   USE snapparML, only: ncomp, run_comp, iparnum, def_comp
@@ -36,8 +36,6 @@ subroutine rmpart(rmlimit, removed_out_of_domain)
   !> if particles content drop to rmlimit*initial-content
   !> the particle will be removed and it's content redistributed
   real, intent(in) :: rmlimit
-  !> Removed bq out of the domain
-  real(kind=real64), intent(inout) :: removed_out_of_domain(:)
 
   integer :: m,n,npl,i,i1,i2,iredist, mm
 
@@ -122,8 +120,6 @@ subroutine rmpart(rmlimit, removed_out_of_domain)
           pdata(n) = pdata(i)
           iparnum(n)=iparnum(i)
         end if
-      else
-        removed_out_of_domain(pdata(i)%icomp) = removed_out_of_domain(pdata(i)%icomp) + pdata(i)%rad
       endif
     end do
 
