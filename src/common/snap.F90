@@ -694,7 +694,7 @@ PROGRAM bsnap
 
       call particleloop_timer%start()
       ! particle loop
-      !$OMP PARALLEL DO PRIVATE(np,pextra,outside_domain) SCHEDULE(guided) REDUCTION(+:bq_removed_ood)
+      !$OMP PARALLEL DO PRIVATE(np,n,pextra,outside_domain) SCHEDULE(guided) REDUCTION(+:bq_removed_ood)
       part_do: do np = 1, npart
         if (.not. pdata(np)%active) cycle part_do
 
@@ -722,7 +722,8 @@ PROGRAM bsnap
         call constrain_to_domain(pdata(np), outside_domain)
         if (outside_domain) then
           pdata(np)%active = .false.
-          bq_removed_ood(pdata(np)%icomp) = bq_removed_ood(pdata(np)%icomp) + pdata(np)%rad
+          n = def_comp(pdata(np)%icomp)%to_running
+          bq_removed_ood(n) = bq_removed_ood(n) + pdata(np)%rad
         endif
       end do part_do
       !$OMP END PARALLEL DO
