@@ -382,7 +382,7 @@ subroutine fldout_nc(filename, itime,tf1,tf2,tnow, &
         use snapdimML, only: nk
       if (output_wetdeprate) then
         call check(nf90_put_var(iunit, varid%comp(m)%wetscavrate, start=[1,1,1,ihrs_pos], &
-          count=[nx,ny,nk,1], values=wscav(:,:,:,m)), "wscavrate")
+          count=[nx,ny,nk-1,1], values=wscav(:,:,2:,m)), "wscavrate")
       endif
       end block
     endif
@@ -1249,6 +1249,7 @@ subroutine initialize_output(filename, itime, ierror)
           trim(def_comp(mm)%compnamemc)//"_acc_dry_deposition", &
           units="Bq/m2", chunksize=chksz3d)
       end if
+
       if (def_comp(mm)%kwetdep > 0) then
         call nc_declare(iunit, dimids3d, varid%comp(m)%iwd, &
           trim(def_comp(mm)%compnamemc)//"_wet_deposition", &
@@ -1256,12 +1257,12 @@ subroutine initialize_output(filename, itime, ierror)
         call nc_declare(iunit, dimids3d, varid%comp(m)%accwd, &
           trim(def_comp(mm)%compnamemc)//"_acc_wet_deposition", &
           units="Bq/m2", chunksize=chksz3d)
-          if (output_wetdeprate) then
-            call nc_declare(iunit, dimids3d, varid%comp(m)%wetscavrate, &
-             "wetdeprate", units="m/s", chunksize=chksz3d)
-          endif
-
+        if (output_wetdeprate) then
+          call nc_declare(iunit, dimids4d, varid%comp(m)%wetscavrate, &
+             trim(def_comp(mm)%compnamemc)//"_wetdeprate", units="m/s", chunksize=chksz4d)
+        endif
       end if
+
       if (imodlevel) then
         if (modleveldump > 0.) then
           string = trim(def_comp(mm)%compnamemc)//"_concentration_dump_ml"
@@ -1522,7 +1523,7 @@ subroutine get_varids(iunit, varid, ierror)
       ierror = nf90_inq_varid(iunit, varname, varid%comp(m)%accwd)
       if (ierror /= NF90_NOERR .and. .not. ierror == NF90_ENOTVAR) return
 
-      ierror = nf90_inq_varid(iunit, "wetdeprate", varid%comp(m)%wetscavrate)
+      ierror = nf90_inq_varid(iunit, trim(def_comp(mm)%compnamemc)//"_wetdeprate", varid%comp(m)%wetscavrate)
       if (ierror /= NF90_NOERR .and. .not. ierror == NF90_ENOTVAR) return
     endif
 
