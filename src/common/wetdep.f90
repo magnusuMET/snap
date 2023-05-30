@@ -376,79 +376,103 @@ contains
     lambda = 1 - P/(P + C_w) * f_inc * C_f
   end subroutine
 
-  subroutine wet_deposition_rate_bartnicki(wscav, radius, precip, ccf, use_ccf)
+  subroutine wet_deposition_rate_bartnicki(wscav, radius, precip, cw, ccf, use_ccf, use_incloud)
     real, intent(out) :: wscav(:,:,:)
     real, intent(in) :: precip(:,:,:)
+    real, intent(in) :: cw(:,:,:)
     real, intent(in) :: radius
     real, intent(in) :: ccf(:,:,:)
-    logical, intent(in) :: use_ccf
+    logical, intent(in) :: use_ccf, use_incloud
 
     real :: depconst
-
-    depconst = wet_deposition_constant(radius)
-    if (.not.use_ccf) then
-      wscav(:,:,:) = wet_deposition_rate_imm(radius, precip, depconst)
-      return
-    endif
-
-    block
-      integer :: i, j, k, nx, ny, nk
-      real, allocatable :: precip_scaled(:,:)
-      real, allocatable :: ccf_max(:,:)
+    integer :: nx, ny, nk
 
       nx = size(precip,1)
       ny = size(precip,2)
       nk = size(precip,3)
 
-      allocate(precip_scaled(nx,ny), ccf_max(nx,ny))
+    depconst = wet_deposition_constant(radius)
+    if (.not.use_ccf) then
+      wscav(:,:,:) = wet_deposition_rate_imm(radius, precip, depconst)
 
-      ccf_max(:,:) = 0.0
+    else
+      block
+        integer :: i, j, k
+        real, allocatable :: precip_scaled(:,:)
+        real, allocatable :: ccf_max(:,:)
+
+
+        allocate(precip_scaled(nx,ny), ccf_max(nx,ny))
+
+        ccf_max(:,:) = 0.0
+
+        do k=nk,1,-1
+          precip_scaled(:,:) = 0.0
+          ccf_max(:,:) = max(ccf_max, ccf(:,:,k))
+
+          do j=1,ny
+            do i=1,nx
+              if (precip(i,j,k) <= 0.0) cycle
+
+              if (ccf_max(i,j) > 0.0) then
+                ! Scales up the precipitation intensity
+                precip_scaled(i,j) = precip(i,j,k) / ccf_max(i,j)
+              else
+                precip_scaled(i,j) = precip(i,j,k)
+              endif
+            enddo
+          enddo
+          wscav(:,:,k) = wet_deposition_rate_imm(radius, precip_scaled, depconst)
+
+          do j=1,ny
+            do i=1,nx
+              if (ccf_max(i,j) > 0.0) then
+                ! Only applies to the portion in the cloud
+                wscav(i,j,k) = wscav(i,j,k) * ccf_max(i,j)
+              endif
+            enddo
+          enddo
+        enddo
+      end block
+    endif
+
+    if (.not.use_incloud) return
+    ! TODO: Incloud scavenging
+    block
+      integer :: k
+      real, allocatable :: incloud_coeff(:,:)
+
+      allocate(incloud_coeff(nx,ny))
 
       do k=nk,1,-1
-        precip_scaled(:,:) = 0.0
-        ccf_max(:,:) = max(ccf_max, ccf(:,:,k))
-
-        do j=1,ny
-          do i=1,nx
-            if (precip(i,j,k) <= 0.0) cycle
-
-            if (ccf_max(i,j) > 0.0) then
-              ! Scales up the precipitation intensity
-              precip_scaled(i,j) = precip(i,j,k) / ccf_max(i,j)
-            else
-              precip_scaled(i,j) = precip(i,j,k)
-            endif
-          enddo
-        enddo
-        wscav(:,:,k) = wet_deposition_rate_imm(radius, precip_scaled, depconst)
-
-        do j=1,ny
-          do i=1,nx
-            if (ccf_max(i,j) > 0.0) then
-              ! Only applies to the portion in the cloud
-              wscav(:,:,k) = wscav(:,:,k) * ccf_max
-            endif
-          enddo
-        enddo
+        call incloud_scavenging(incloud_coeff, precip(:,:,k), cw(:,:,k), ccf(:,:,k))
+        wscav(:,:,k) = max(wscav(:,:,k), incloud_coeff)
       enddo
     end block
   end subroutine
 
   elemental subroutine incloud_scavenging(scav, precip, cw, cc)
+    USE IEEE_ARITHMETIC, only: IEEE_VALUE, IEEE_POSITIVE_INF
     real, intent(out) :: scav
     real, intent(in) :: precip
     real, intent(in) :: cw
     real, intent(in) :: cc
 
     real :: drainage_time
+    real, parameter :: MIN_DRAINAGE_TIME = 300
 
+    if (precip == 0.0) then
+      drainage_time = IEEE_VALUE(drainage_time, IEEE_POSITIVE_INF)
+    else
+      drainage_time = cw / precip
+    endif
 
-    drainage_time = cw / precip
+    drainage_time = max(drainage_time, MIN_DRAINAGE_TIME)
 
     scav = 1.0 / drainage_time
   end subroutine
 
-  subroutine prepare_wetdep(wscav, radius, scheme, precip, cw, ccf, use_ccf)
+  subroutine prepare_wetdep(wscav, radius, scheme, precip, cw, ccf, use_ccf, use_incloud)
     type(wetdep_scheme_t), intent(in) :: scheme
     real, intent(out) :: wscav(:,:,:)
     real, intent(in) :: precip(:,:,:)
@@ -457,10 +481,11 @@ contains
     !> Cloud cover fraction
     real, intent(in) :: ccf(:,:,:)
     logical, intent(in) :: use_ccf
+    logical, intent(in) :: use_incloud
 
     if (scheme == WETDEP_SCHEME_BARTNICKI) then
-      call wet_deposition_rate_bartnicki(wscav, radius, precip, ccf, &
-                use_ccf=use_ccf)
+      call wet_deposition_rate_bartnicki(wscav, radius, precip, cw, ccf, &
+                use_ccf=use_ccf, use_incloud=use_incloud)
     else
       error stop "Not implemented"
     endif
