@@ -85,16 +85,27 @@ STEP.HOUR.OUTPUT.FIELDS= 3
     with open(f"{dirname}/snap.stdout.log", "wt") as stdout:
         with open(f"{dirname}/snap.stderr.log", "wt") as stderr:
             os.environ["OMP_NUM_THREADS"] = "2"  # moderate thread usage
-            subprocess.run(
-                ["bsnap_naccident", "snap.input"],
-                cwd=dirname,
-                stdout=stdout,
-                stderr=stderr,
-            )
+            try:
+                subprocess.run(
+                    ["bsnap_naccident", "snap.input"],
+                    cwd=dirname,
+                    stdout=stdout,
+                    stderr=stderr,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                print(f"{e}\nContinuing despite errors")
             # add time of arrival
-            subprocess.run(
-                ["snapAddToa", "snap.nc"], cwd=dirname, stdout=stdout, stderr=stderr
-            )
+            try:
+                subprocess.run(
+                    ["snapAddToa", "snap.nc"],
+                    cwd=dirname,
+                    stdout=stdout,
+                    stderr=stderr,
+                    check=true,
+                )
+            except subprocess.CalledProcessError as e:
+                print(f"\nContinuing despite errors")
     # and plot
     prod_dir = os.path.join(dirname, "prod")
     os.mkdir(prod_dir)
@@ -139,7 +150,11 @@ m=SNAP.current t=fimex format=netcdf f={dirname}/snap.nc
     os.environ["QT_QPA_PLATFORMTHEME"] = ""
     os.environ["QT_QPA_FONTDIR"] = "/usr/share/fonts/truetype"
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
-    subprocess.run(["bdiana", "-i", "diana.in", "-s", "diana.setup"], cwd=prod_dir)
+    try:
+        subprocess.run(["bdiana", "-i", "diana.in", "-s", "diana.setup"], cwd=prod_dir, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"{e}")
+        return False
     return True
 
 
