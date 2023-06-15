@@ -38,14 +38,14 @@ setup(
         "snap4rimsterm",
         "snapCombineInverse",
         "snapNc2grib.py",
-        "snapRunnerNpps",
         "snapRunnerNpp",
         "eemepModelRunner",
         "snapRemoteRunner.py"
     ],
     entry_points={
         'console_scripts': [
-            'snapAddBombIsotopes = Snappy.AddBombIsotopes:main'
+            'snapAddBombIsotopes = Snappy.AddBombIsotopes:main',
+            'snapRunnerNpps = Snappy.snapRunnerNpps:main',
         ]
     }
 )
