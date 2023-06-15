@@ -102,7 +102,7 @@ STEP.HOUR.OUTPUT.FIELDS= 3
                     cwd=dirname,
                     stdout=stdout,
                     stderr=stderr,
-                    check=true,
+                    check=True,
                 )
             except subprocess.CalledProcessError as e:
                 print(f"\nContinuing despite errors")
