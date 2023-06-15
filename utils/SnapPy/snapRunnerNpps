@@ -13,8 +13,8 @@ from time import gmtime, strftime
 def get_isotope_release(res, reldict):
     errors = ""
     for tag in ("releaseTime", "radius", "lowerHeight", "upperHeight"):
-        if not tag in reldict:
-            errors += "Cannot interprete {}: {}".format(tag, reldict[tag])
+        if tag not in reldict:
+            errors += "Cannot interpret {}: {}".format(tag, reldict[tag])
 
     source_tmpl = """
 MAX.PARTICLES.PER.RELEASE= 2000
@@ -36,7 +36,7 @@ RELEASE.UPPER.M= {upperHeight}, {upperHeight}
         emis = 0.0
         try:
             emis = float(reldict[rel])
-        except:
+        except Exception:
             pass
         if emis > 0.0:
             source_term += "RELEASE.BQ/SEC.COMP= {rel}, {rel}, '{iso}'\n".format(
@@ -167,7 +167,7 @@ def runsnap(npps, outdir):
     res.getLustreDir()  # set lustredir within res before parallelization - mapp-services.sh not parallelizable yet
     nPPs = res.readNPPs()
     for i, tag in enumerate(npps):
-        if not tag in nPPs:
+        if tag not in nPPs:
             print(f"unknown NPP: {tag}", file=sys.stderr)
             sys.exit(1)
         tag_time = gmtime(
@@ -202,7 +202,7 @@ def runsnap(npps, outdir):
     subprocess.run(opts)
 
 
-if __name__ == "__main__":
+def main():
     os.umask(0o002)
 
     parser = argparse.ArgumentParser(
@@ -226,3 +226,7 @@ if __name__ == "__main__":
     if args.store:
         os.environ["STORE"] = args.store
     runsnap(args.NPP, args.dir)
+
+
+if __name__ == "__main__":
+    main()
