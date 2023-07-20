@@ -476,7 +476,7 @@ contains
         do i=1,ncomp
           if (.not.run_comp(i)%defined%kdrydep == 1) cycle
           call prepare_wetdep(wscav(:,:,:,i), run_comp(i)%defined%radiusmym, wetdep_scheme, precip3d, cw3d, cloud_cover, &
-            use_ccf=met_params%use_ccf, use_incloud=met_params%use_incloud)
+            use_ccf=met_params%use_ccf)
         enddo
       end block
     endif
