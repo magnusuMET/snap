@@ -195,7 +195,9 @@ PROGRAM bsnap
   USE forwrdML, only: forwrd, forwrd_init
   USE wetdep, only: wetdep2, wetdep2_init, wetdep_scheme, WETDEP_SCHEME_UNDEFINED, WETDEP_SCHEME_BARTNICKI, &
     operator(==), operator(/=), wet_deposition_conventional_params => conventional_params, &
-    WETDEP_SCHEME_CONVENTIONAL, wetdep_conventional_init, wetdep_conventional_compute, wetdep_conventional
+    WETDEP_SCHEME_CONVENTIONAL, wetdep_conventional_init, wetdep_conventional_compute, wetdep_conventional, &
+    wetdep_incloud_scheme, WETDEP_INCLOUD_SCHEME_NONE, WETDEP_INCLOUD_SCHEME_GCM, WETDEP_INCLOUD_SCHEME_CTM, &
+    WETDEP_INCLOUD_SCHEME_UNDEFINED
   use wetdep, only: wet_deposition_conventional_params => conventional_params
   USE drydep, only: drydep1, drydep2, drydep_nonconstant_vd, drydep_scheme, &
           DRYDEP_SCHEME_OLD, DRYDEP_SCHEME_NEW, DRYDEP_SCHEME_EMEP, &
@@ -501,6 +503,7 @@ PROGRAM bsnap
     write (iulog, *) 'irwalk:  ', use_random_walk
     write (iulog, *) 'drydep_scheme: ', drydep_scheme
     write (iulog, *) 'wetdep_scheme: ', wetdep_scheme%description
+    write (iulog, *) 'wetdep_incloud_scheme: ', wetdep_incloud_scheme%description
     write (iulog, *) 'idecay:  ', idecay
     write (iulog, *) 'rmlimit: ', rmlimit
     write (iulog, *) 'ndefcomp:', size(def_comp)
@@ -1225,6 +1228,24 @@ contains
             wetdep_scheme = WETDEP_SCHEME_BARTNICKI
           case("conventional")
             wetdep_scheme = WETDEP_SCHEME_CONVENTIONAL
+          case default
+            write(error_unit,*) "Unknown scheme ", cinput(pname_start:pname_end)
+            goto 12
+        end select
+      case ('wet.deposition.incloud.scheme')
+        if (.not.has_value) goto 12
+        if (wetdep_incloud_scheme /= WETDEP_INCLOUD_SCHEME_UNDEFINED) then
+          write (error_unit, *) "already set"
+          goto 12
+        endif
+        call to_lowercase(cinput(pname_start:pname_end))
+        select case(cinput(pname_start:pname_end))
+          case("none")
+            wetdep_incloud_scheme = WETDEP_INCLOUD_SCHEME_NONE
+          case("gcm")
+            wetdep_incloud_scheme = WETDEP_INCLOUD_SCHEME_GCM
+          case("ctm")
+            wetdep_incloud_scheme = WETDEP_INCLOUD_SCHEME_CTM
           case default
             write(error_unit,*) "Unknown scheme ", cinput(pname_start:pname_end)
             goto 12
